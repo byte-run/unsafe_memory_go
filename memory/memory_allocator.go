@@ -9,28 +9,29 @@ type MemAllocator interface {
 	Free(addr unsafe.Pointer)
 }
 
-//type MemAllocator struct{
-//
-//}
-
 type GoMemAllocator struct{}
 
-func (allocator GoMemAllocator) Allocate(numBytes int) unsafe.Pointer {
+func (allocator *GoMemAllocator) Allocate(numBytes int) unsafe.Pointer {
 	address := platformInstance.allocate(uintptr(numBytes))
 	return address
 }
 
-func (allocator GoMemAllocator) Free(ptr unsafe.Pointer) {
+func (allocator *GoMemAllocator) Free(ptr unsafe.Pointer) {
 	platformInstance.free(ptr, 0)
 }
 
 type CMemAllocator struct{}
 
-func (allocator CMemAllocator) Allocate(numBytes int) unsafe.Pointer {
-	address := platformCInstance.allocate(numBytes)
+func (allocator *CMemAllocator) Allocate(numBytes int) unsafe.Pointer {
+	address := platformCInstance.allocate(uintptr(numBytes))
 	return address
 }
 
-func (allocator CMemAllocator) Free(ptr unsafe.Pointer) {
+func (allocator *CMemAllocator) Free(ptr unsafe.Pointer) {
 	platformInstance.free(ptr, 0)
 }
+
+var (
+	UnsafeGo = &GoMemAllocator{}
+	UnsafeC  = &CMemAllocator{}
+)
