@@ -46,6 +46,28 @@ func (mem unsafeMemory) acquireIntersectionMemory(numBytes uintptr) (unsafe.Poin
 	return nil, nil
 }
 
+func (mem unsafeMemory) ReleaseStorageMemory() {
+	mem.mu.Lock()
+	defer mem.mu.Unlock()
+
+	mem.storagePool.ReleaseMemory()
+}
+
+func (mem unsafeMemory) ReleaseShuffleMemory(numBytes uintptr) {
+	mem.mu.Lock()
+	defer mem.mu.Unlock()
+
+	mem.shufflePool.ReleaseMemory(numBytes)
+}
+
+func (mem unsafeMemory) ReleaseIntersectionMemory(numBytes uintptr) {
+	mem.mu.Lock()
+	defer mem.mu.Unlock()
+
+	mem.intersectionPool.ReleaseMemory(numBytes)
+}
+
+// newUnsafeMemory init
 func newUnsafeMemory(config MemoryConfig) *unsafeMemory {
 	unsafeMem := new(unsafeMemory)
 
@@ -74,13 +96,11 @@ func (manager *UnsafeManager) Allocate(numBytes uintptr) (unsafe.Pointer, error)
 	return nil, nil
 }
 
-// 对外接口，单实列
-var _unsafe *unsafeMemory = nil
-
-func newUnsafeManager(memLimits ...int) *UnsafeManager {
+func newUnsafeManager(conf MemoryConfig) *UnsafeManager {
 	mem := new(UnsafeManager)
 
 	mem.memAllocator = dynamicMemAllocator("C")
+	mem.unsafeMemory = *newUnsafeMemory(conf)
 
 	return mem
 }

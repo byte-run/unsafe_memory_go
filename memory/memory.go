@@ -13,3 +13,8 @@ type MemLocation struct {
 	Obj    reflect.Kind
 	Offset uintptr // address
 }
+
+func (loc *MemLocation) ClearObjAndOffset() {
+	loc.Obj = 0
+	loc.Offset = uintptr(0)
+}

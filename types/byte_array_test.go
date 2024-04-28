@@ -22,3 +22,22 @@ func TestGoType(t *testing.T) {
 	pointerSize := unsafe.Sizeof(pointerVar)
 	t.Logf("pointer size: %d", pointerSize)
 }
+
+func TestGoSizeof(t *testing.T) {
+	// array or slice
+	var testArray = [5]int{1, 2, 3, 4, 5} // int type: 8 bits
+	testArraySize := unsafe.Sizeof(testArray)
+	t.Logf("testArray size: %d", testArraySize) // testArray size: 40 = 8 * 5
+
+	/*
+		SliceHeader size = 24
+	*/
+	var testSlice = make([]int, 5)
+	testSlice = append(testSlice, 1, 2, 3)
+	testSliceSize := unsafe.Sizeof(testSlice)
+	t.Logf("testSlice size: %d", testSliceSize) // testSlice size: 24 =
+
+	testSlice = append(testSlice, 4, 5, 6)
+	testSliceSize = unsafe.Sizeof(testSlice)
+	t.Logf("testSlice size: %d", testSliceSize) // testSlice size: 24 =
+}
