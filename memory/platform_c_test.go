@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"runtime"
 	"testing"
 	"unsafe"
 )
@@ -20,7 +21,7 @@ func TestCMemAllocator_Allocate(t *testing.T) {
 
 func TestGoMemAllocator_Allocate(t *testing.T) {
 	needBytes := uint((10 + 7) & ^(7))
-	addr, err := platformCInstance.allocate(needBytes)
+	addr, err := platformCInstance.allocate(uintptr(needBytes))
 	defer platformInstance.free(addr, uintptr(needBytes))
 
 	if err != nil {
@@ -39,9 +40,9 @@ func TestGoMemAllocator_Allocate(t *testing.T) {
 
 func TestCMemAllocator_OutOfMemory(t *testing.T) {
 	needNumBytes := uint64(80 * 1024 * 1024 * 1024) // 80GB
-	allocate, err := platformCInstance.allocate(uint(uintptr(needNumBytes)))
+	allocate, err := platformCInstance.allocate(uintptr(needNumBytes))
 	if err != nil {
-		t.Log("allocate fail: Out Of Memory")
+		t.Logf("allocate fail: %v\n", err)
 		return
 	}
 	t.Logf("allocate address: %v", allocate)
@@ -64,4 +65,9 @@ func TestIntConvertToByte(t *testing.T) {
 	byteValue := byte(testValue)
 
 	t.Logf("byte value: %v", byteValue)
+}
+
+func TestSysPageSize(t *testing.T) {
+	pageSize := runtime.MemProfileRate
+	t.Logf("page size: %v", pageSize) // 524288 = 512KB
 }

@@ -2,12 +2,12 @@ package memory
 
 import "reflect"
 
-type MemManager struct {
-}
-
-//func (mem MemManager) memoryAllocator() *MemAllocator {
-//
-//}
+const (
+	PageWordSize   = 8
+	LargePageShift = 17
+	LargePageSize  = 1 << LargePageShift // 125K
+	PageSizeShift  = 1 << PageWordSize   // 256byte
+)
 
 type MemLocation struct {
 	Obj    reflect.Kind
@@ -17,4 +17,9 @@ type MemLocation struct {
 func (loc *MemLocation) ClearObjAndOffset() {
 	loc.Obj = 0
 	loc.Offset = uintptr(0)
+}
+
+type MemBlock struct {
+	MemLocation
+	length uintptr
 }

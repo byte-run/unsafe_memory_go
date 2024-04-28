@@ -2,7 +2,6 @@ package tcmallocgo
 
 import (
 	"github.com/byte-run/unsafe_mem_go/utils"
-	"math"
 	"sync"
 )
 
@@ -45,10 +44,18 @@ func (p *MemoryPool) CheckPoolCapacity() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	// todo
+	if p.used < p.getMemoryPoolLevelOneThreshold() {
+
+	}
 }
 
 func (p *MemoryPool) getMemoryPoolLevelOneThreshold() uintptr {
-	return uintptr(math.Float64bits(float64(p.PoolSize) * PoolLevelOneFactor))
+	return uintptr(float64(p.PoolSize) * PoolLevelOneFactor)
+}
+
+func (p *MemoryPool) getMemoryPoolLevelTwoThreshold() uintptr {
+	return uintptr(float64(p.PoolSize) * PoolLevelTwoFactor)
 }
 
 // storageMemoryPool 存储内存池，管理元数据

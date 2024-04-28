@@ -19,7 +19,7 @@ import (
 type platformC struct{}
 
 // malloc 申请
-func (p platformC) allocate(size uint) (unsafe.Pointer, error) {
+func (p platformC) allocate(size uintptr) (unsafe.Pointer, error) {
 	addr := C.customMalloc(C.size_t(size))
 	if addr == nil {
 		return nil, utils.PlatformOutOfMemoryError
