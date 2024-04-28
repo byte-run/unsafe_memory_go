@@ -1,11 +1,18 @@
 package memory
 
-import "unsafe"
+import (
+	"github.com/byte-run/unsafe_mem_go/utils"
+	"unsafe"
+)
 
 type platform struct{}
 
-func (p *platform) allocate(n uintptr) unsafe.Pointer {
-	return sysAllocOS(n)
+func (p *platform) allocate(n uintptr) (unsafe.Pointer, error) {
+	addr := sysAllocOS(n)
+	if addr == nil {
+		return nil, utils.PlatformOutOfMemoryError
+	}
+	return addr, nil
 }
 
 func (p *platform) free(address unsafe.Pointer, n uintptr) {

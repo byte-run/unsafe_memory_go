@@ -2,13 +2,28 @@ package tcmallocgo
 
 import (
 	"github.com/byte-run/unsafe_mem_go/utils"
+	"math"
 	"sync"
+)
+
+type MemoryPoolStatus int8
+
+const (
+	//Memory
+	MemoryUsageLevelOneWarn MemoryPoolStatus = iota + 100
+	MemoryUsageLevelTwoWarn
+)
+
+const (
+	PoolLevelOneFactor = 0.8
+	PoolLevelTwoFactor = 0.9
 )
 
 type MemoryPool struct {
 	mu       sync.Mutex
 	PoolSize uintptr
 	used     uintptr
+	status   int
 }
 
 func (p *MemoryPool) MemoryFree() uintptr {
@@ -26,7 +41,14 @@ func (p *MemoryPool) IncrementPoolSize(size uintptr) {
 	p.used -= size
 }
 
-type memChuck struct {
+func (p *MemoryPool) CheckPoolCapacity() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+}
+
+func (p *MemoryPool) getMemoryPoolLevelOneThreshold() uintptr {
+	return uintptr(math.Float64bits(float64(p.PoolSize) * PoolLevelOneFactor))
 }
 
 // storageMemoryPool 存储内存池，管理元数据
@@ -39,9 +61,9 @@ func (pool *storageMemoryPool) PoolName() string {
 }
 
 // AcquireMemory 申请内存，有点类似提交内存大小的申请，看pool limit够不够
-func (pool *storageMemoryPool) AcquireMemory(numBytes uintptr) (uintptr, error) {
+func (pool *storageMemoryPool) AcquireMemory(numBytes uintptr) (bool, error) {
 	if numBytes == 0 {
-		return numBytes, utils.AcquireMemoryBytesZeroError
+		return false, utils.AcquireMemoryBytesZeroError
 	}
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
@@ -51,9 +73,10 @@ func (pool *storageMemoryPool) AcquireMemory(numBytes uintptr) (uintptr, error) 
 	// 如果pool有空间的话, 更新pool的use
 	if grant == numBytes {
 		pool.MemoryPool.used += numBytes
+		return true, nil
 	}
 
-	return grant, nil
+	return false, utils.StoragePoolOutOfMemoryError
 }
 
 // ReleaseMemory 释放内存
@@ -64,10 +87,15 @@ func (pool *storageMemoryPool) ReleaseMemory() {
 	pool.used = 0
 }
 
+//type executionMemoryPool struct {
+//	MemoryPool
+//	cond sync.Cond
+//}
+
 // shuffleMemoryPool shuffle时的内存控制，主要用于bucket数据
 type shuffleMemoryPool struct {
 	MemoryPool
-	cond sync.Cond
+	cond sync.Cond // 接收上层传递得mu
 	//chuckMap map[int]unsafe.Pointer // 内存块
 }
 
