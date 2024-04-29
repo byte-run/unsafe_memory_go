@@ -36,3 +36,19 @@ func (b *ByteArray) append(bytes []byte) {
 
 	}
 }
+
+type StructToBytes struct {
+	data int64
+	str  string
+}
+
+type SliceMock struct {
+	addr uintptr
+	len  int
+	cap  int
+}
+
+type StructToByte struct {
+	data int64
+	str  any
+}

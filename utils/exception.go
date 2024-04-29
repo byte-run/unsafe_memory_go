@@ -10,14 +10,6 @@ func (e MemError) Error() string {
 	return fmt.Sprintf("error: %s", e.msg)
 }
 
-type MemWarn struct {
-	msg string
-}
-
-func (e MemWarn) Error() string {
-	return fmt.Sprintf("error: %s", e.msg)
-}
-
 // 内存不足场景
 var (
 	PlatformOutOfMemoryError         = MemError{msg: "platform out of memory"}
@@ -33,11 +25,39 @@ var (
 )
 
 // 警告场景
-var (
-	StoragePoolLevelOneMemoryWarning      = MemError{msg: "storage memory pool use 80%"}
-	StoragePoolLevelTwoMemoryWarning      = MemError{msg: "storage memory pool use 90%"}
-	ShufflePoolLevelOneMemoryWarning      = MemError{msg: "shuffle memory pool use 80%"}
-	ShufflePoolLevelTwoMemoryWarning      = MemError{msg: "shuffle memory pool use 90%"}
-	IntersectionPoolLevelOneMemoryWarning = MemError{msg: "intersection memory pool use 80%"}
-	IntersectionPoolLevelTwoMemoryWarning = MemError{msg: "intersection memory pool use 90%"}
-)
+//var (
+//	StoragePoolLevelOneMemoryWarning      = MemError{msg: "storage memory pool use 80%"}
+//	StoragePoolLevelTwoMemoryWarning      = MemError{msg: "storage memory pool use 90%"}
+//	ShufflePoolLevelOneMemoryWarning      = MemError{msg: "shuffle memory pool use 80%"}
+//	ShufflePoolLevelTwoMemoryWarning      = MemError{msg: "shuffle memory pool use 90%"}
+//	IntersectionPoolLevelOneMemoryWarning = MemError{msg: "intersection memory pool use 80%"}
+//	IntersectionPoolLevelTwoMemoryWarning = MemError{msg: "intersection memory pool use 90%"}
+//)
+
+//type MemWarn struct {
+//	msg string
+//}
+//
+//func (e MemWarn) Error() string {
+//	return fmt.Sprintf("error: %s", e.msg)
+//}
+
+type MemPoolWarn interface {
+	Warning() string
+}
+
+type MemoryPoolLevelOneWarning struct {
+	PoolName string
+}
+
+func (e MemoryPoolLevelOneWarning) Warning() string {
+	return fmt.Sprintf("%s memory pool use 80%", e.PoolName)
+}
+
+type MemoryPoolLevelTwoWarning struct {
+	PoolName string
+}
+
+func (e MemoryPoolLevelTwoWarning) Warning() string {
+	return fmt.Sprintf("%s memory pool use 90%", e.PoolName)
+}

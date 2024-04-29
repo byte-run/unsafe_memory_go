@@ -43,4 +43,7 @@ func (p platformC) memCpy(dst, src unsafe.Pointer, length uintptr) {
 	C.memcpy(dst, src, C.size_t(length))
 }
 
+// 初始值
+//func (p platformC) memSet()
+
 var platformCInstance = new(platformC)

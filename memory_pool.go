@@ -5,14 +5,6 @@ import (
 	"sync"
 )
 
-type MemoryPoolStatus int8
-
-const (
-	//Memory
-	MemoryUsageLevelOneWarn MemoryPoolStatus = iota + 100
-	MemoryUsageLevelTwoWarn
-)
-
 const (
 	PoolLevelOneFactor = 0.8
 	PoolLevelTwoFactor = 0.9
@@ -22,32 +14,34 @@ type MemoryPool struct {
 	mu       sync.Mutex
 	PoolSize uintptr
 	used     uintptr
-	status   int
 }
 
 func (p *MemoryPool) MemoryFree() uintptr {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
 	return p.PoolSize - p.used
 }
 
-func (p *MemoryPool) IncrementPoolSize(size uintptr) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	// check
+//func (p *MemoryPool) IncrementU(size uintptr) {
+//	p.mu.Lock()
+//	defer p.mu.Unlock()
+//	// check
+//
+//	p.used -= size
+//}
 
-	p.used -= size
-}
+func (p *MemoryPool) checkPoolCapacity(poolName string) utils.MemPoolWarn {
+	levelOneThreshold := p.getMemoryPoolLevelOneThreshold()
+	levelTwoThreshold := p.getMemoryPoolLevelTwoThreshold()
 
-func (p *MemoryPool) CheckPoolCapacity() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	// todo
-	if p.used < p.getMemoryPoolLevelOneThreshold() {
-
+	if p.used >= levelTwoThreshold {
+		return utils.MemoryPoolLevelTwoWarning{
+			PoolName: poolName,
+		}
+	} else if p.used >= levelOneThreshold {
+		return utils.MemoryPoolLevelOneWarning{
+			PoolName: poolName,
+		}
 	}
+	return nil
 }
 
 func (p *MemoryPool) getMemoryPoolLevelOneThreshold() uintptr {
@@ -87,11 +81,25 @@ func (pool *storageMemoryPool) AcquireMemory(numBytes uintptr) (bool, error) {
 }
 
 // ReleaseMemory 释放内存
-func (pool *storageMemoryPool) ReleaseMemory() {
+func (pool *storageMemoryPool) ReleaseMemory(numBytes uintptr) {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+
+	pool.used -= numBytes
+}
+
+func (pool *storageMemoryPool) ReleaseAllMemory() {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 
 	pool.used = 0
+}
+
+func (pool *storageMemoryPool) CheckPoolCapacity() utils.MemPoolWarn {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+
+	return pool.checkPoolCapacity(pool.PoolName())
 }
 
 //type executionMemoryPool struct {
@@ -133,6 +141,17 @@ func (pool *shuffleMemoryPool) ReleaseMemory(numBytes uintptr) {
 	pool.cond.Broadcast()
 }
 
+func (pool *shuffleMemoryPool) ReleaseAllMemory() {
+	pool.used = 0
+}
+
+func (pool *shuffleMemoryPool) CheckPoolCapacity() utils.MemPoolWarn {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+
+	return pool.checkPoolCapacity(pool.PoolName())
+}
+
 // intersectionMemoryPool 交集计算时的内存控制
 type intersectionMemoryPool struct {
 	MemoryPool
@@ -165,4 +184,15 @@ func (pool *intersectionMemoryPool) ReleaseMemory(numBytes uintptr) {
 
 	pool.used -= numBytes
 	pool.cond.Broadcast()
+}
+
+func (pool *intersectionMemoryPool) CheckPoolCapacity() utils.MemPoolWarn {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+
+	return pool.checkPoolCapacity(pool.PoolName())
+}
+
+func (pool *intersectionMemoryPool) ReleaseAllMemory() {
+	pool.used = 0
 }

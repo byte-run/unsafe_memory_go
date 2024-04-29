@@ -5,6 +5,11 @@ import (
 	"strings"
 )
 
+const (
+	MB_Factor = 1024 * 1024
+	GB_Factor = 1024 * 1024 * 1024
+)
+
 type MemoryConfig struct {
 	StorageMem      string
 	ShuffleMem      string
@@ -12,27 +17,24 @@ type MemoryConfig struct {
 }
 
 func (conf MemoryConfig) GetStorageMemBytes() uintptr {
-	// TODO waiting for finish
-
-	return 0
+	numBytes, _ := convertMemBytes(conf.StorageMem)
+	return numBytes
 }
 
 // GetShuffleMemBytes 获取shuffle块的内存容量，单位是bytes
 func (conf MemoryConfig) GetShuffleMemBytes() uintptr {
-	// TODO waiting for finish
-
-	return 0
+	numBytes, _ := convertMemBytes(conf.ShuffleMem)
+	return uintptr(numBytes)
 }
 
 func (conf MemoryConfig) GetIntersectionMemBytes() uintptr {
-	// TODO waiting for finish
-
-	return 0
+	numBytes, _ := convertMemBytes(conf.IntersectionMem)
+	return uintptr(numBytes)
 }
 
 // 先限定GB单位
-func convertMemBytes(memStr string) (int, error) {
-	split := strings.Split(memStr, "GB")
+func convertMemBytes(memStr string) (uintptr, error) {
+	split := strings.Split(memStr, "G")
 	if len(split) != 2 {
 
 	}
@@ -41,5 +43,6 @@ func convertMemBytes(memStr string) (int, error) {
 		return 0, err
 	}
 	// TODO 待续
-	return v, nil
+
+	return uintptr(v * GB_Factor), nil
 }
