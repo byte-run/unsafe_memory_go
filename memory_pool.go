@@ -11,7 +11,7 @@ const (
 )
 
 type MemoryPool struct {
-	mu       sync.Mutex
+	condMu   sync.Cond
 	PoolSize uintptr
 	used     uintptr
 }
@@ -19,14 +19,6 @@ type MemoryPool struct {
 func (p *MemoryPool) MemoryFree() uintptr {
 	return p.PoolSize - p.used
 }
-
-//func (p *MemoryPool) IncrementU(size uintptr) {
-//	p.mu.Lock()
-//	defer p.mu.Unlock()
-//	// check
-//
-//	p.used -= size
-//}
 
 func (p *MemoryPool) checkPoolCapacity(poolName string) utils.MemPoolWarn {
 	levelOneThreshold := p.getMemoryPoolLevelOneThreshold()
@@ -52,9 +44,24 @@ func (p *MemoryPool) getMemoryPoolLevelTwoThreshold() uintptr {
 	return uintptr(float64(p.PoolSize) * PoolLevelTwoFactor)
 }
 
+func (p *MemoryPool) Lock() {
+	if p.condMu.L == nil {
+		p.condMu = sync.Cond{L: &sync.Mutex{}}
+	}
+	p.condMu.L.Lock()
+}
+
+func (p *MemoryPool) Unlock() {
+	if p.condMu.L == nil {
+		// 说明Locker都没init
+		return
+	}
+	p.condMu.L.Unlock()
+}
+
 // storageMemoryPool 存储内存池，管理元数据
 type storageMemoryPool struct {
-	MemoryPool
+	*MemoryPool
 }
 
 func (pool *storageMemoryPool) PoolName() string {
@@ -66,8 +73,8 @@ func (pool *storageMemoryPool) AcquireMemory(numBytes uintptr) (bool, error) {
 	if numBytes == 0 {
 		return false, utils.AcquireMemoryBytesZeroError
 	}
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
+	pool.condMu.L.Lock()
+	defer pool.condMu.L.Unlock()
 
 	// pool retain mem
 	grant := utils.Min(numBytes, pool.MemoryFree())
@@ -82,22 +89,23 @@ func (pool *storageMemoryPool) AcquireMemory(numBytes uintptr) (bool, error) {
 
 // ReleaseMemory 释放内存
 func (pool *storageMemoryPool) ReleaseMemory(numBytes uintptr) {
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
-
+	//pool.condMu.L.Lock()
+	//defer pool.condMu.L.Unlock()
 	pool.used -= numBytes
+
+	pool.condMu.Broadcast()
 }
 
 func (pool *storageMemoryPool) ReleaseAllMemory() {
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
+	//pool.condMu.L.Lock()
+	//defer pool.condMu.L.Unlock()
 
 	pool.used = 0
 }
 
 func (pool *storageMemoryPool) CheckPoolCapacity() utils.MemPoolWarn {
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
+	//pool.condMu.L.Lock()
+	//defer pool.condMu.L.Unlock()
 
 	return pool.checkPoolCapacity(pool.PoolName())
 }
@@ -109,36 +117,44 @@ func (pool *storageMemoryPool) CheckPoolCapacity() utils.MemPoolWarn {
 
 // shuffleMemoryPool shuffle时的内存控制，主要用于bucket数据
 type shuffleMemoryPool struct {
-	MemoryPool
-	cond sync.Cond // 接收上层传递得mu
-	//chuckMap map[int]unsafe.Pointer // 内存块
+	*MemoryPool
 }
 
 func (pool *shuffleMemoryPool) PoolName() string {
 	return "shuffle bucket"
 }
 
-func (pool *shuffleMemoryPool) AcquireMemory(numBytes uintptr) (uintptr, error) {
-	pool.cond.L.Lock()
-	defer pool.cond.L.Unlock()
+func (pool *shuffleMemoryPool) acquireMemory(numBytes uintptr) (uintptr, error) {
+	//pool.cond.L.Lock()
+	//defer pool.cond.L.Unlock()
 
 	if numBytes == 0 {
 		return numBytes, utils.AcquireMemoryBytesZeroError
 	}
-
-	toGrant := utils.Min(numBytes, pool.MemoryFree())
-	if toGrant < numBytes {
-		pool.cond.Wait()
+	var counter = 0
+	for {
+		toGrant := utils.Min(numBytes, pool.MemoryFree())
+		if toGrant < numBytes {
+			pool.condMu.Wait()
+		} else {
+			pool.used += toGrant
+			//atomic.AddUintptr(&pool.used, toGrant)
+			return toGrant, nil
+		}
+		counter++
+		if counter == 5 {
+			return 0, utils.ShufflePoolOutOfMemoryError
+		}
 	}
-	return toGrant, nil
+	return 0, nil
 }
 
 func (pool *shuffleMemoryPool) ReleaseMemory(numBytes uintptr) {
-	pool.cond.L.Lock()
-	defer pool.cond.L.Unlock()
+	//pool.cond.L.Lock()
+	//defer pool.cond.L.Unlock()
 
 	pool.used -= numBytes
-	pool.cond.Broadcast()
+	pool.condMu.Broadcast()
 }
 
 func (pool *shuffleMemoryPool) ReleaseAllMemory() {
@@ -146,16 +162,15 @@ func (pool *shuffleMemoryPool) ReleaseAllMemory() {
 }
 
 func (pool *shuffleMemoryPool) CheckPoolCapacity() utils.MemPoolWarn {
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
+	//pool.condMu.Lock()
+	//defer pool.condMu.Unlock()
 
 	return pool.checkPoolCapacity(pool.PoolName())
 }
 
 // intersectionMemoryPool 交集计算时的内存控制
 type intersectionMemoryPool struct {
-	MemoryPool
-	cond sync.Cond
+	*MemoryPool
 	//chuckMap map[int]unsafe.Pointer
 }
 
@@ -164,31 +179,41 @@ func (pool *intersectionMemoryPool) PoolName() string {
 }
 
 func (pool *intersectionMemoryPool) AcquireMemory(numBytes uintptr) (uintptr, error) {
-	pool.cond.L.Lock()
-	defer pool.cond.L.Unlock()
+	//pool.Lock()
+	//defer pool.Unlock()
 
 	if numBytes == 0 {
 		return numBytes, utils.AcquireMemoryBytesZeroError
 	}
 
-	toGrant := utils.Min(numBytes, pool.MemoryFree())
-	if toGrant < numBytes {
-		pool.cond.Wait()
+	counter := 0
+	for {
+		toGrant := utils.Min(numBytes, pool.MemoryFree())
+		if toGrant < numBytes {
+			pool.condMu.Wait()
+		} else {
+			pool.used += toGrant
+			return toGrant, nil
+		}
+		counter++
+		if counter == 5 {
+			return 0, utils.IntersectionPoolOutOfMemoryError
+		}
 	}
-	return toGrant, nil
+	return 0, nil
 }
 
 func (pool *intersectionMemoryPool) ReleaseMemory(numBytes uintptr) {
-	pool.cond.L.Lock()
-	defer pool.cond.L.Unlock()
+	//pool.cond.L.Lock()
+	//defer pool.cond.L.Unlock()
 
 	pool.used -= numBytes
-	pool.cond.Broadcast()
+	pool.condMu.Broadcast()
 }
 
 func (pool *intersectionMemoryPool) CheckPoolCapacity() utils.MemPoolWarn {
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
+	//pool.condMu.L.Lock()
+	//defer pool.condMu.L.Unlock()
 
 	return pool.checkPoolCapacity(pool.PoolName())
 }

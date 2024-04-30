@@ -3,7 +3,6 @@ package tcmallocgo
 import (
 	"github.com/byte-run/unsafe_mem_go/memory"
 	"github.com/byte-run/unsafe_mem_go/utils"
-	"sync"
 	"unsafe"
 )
 
@@ -42,8 +41,6 @@ type MemoryManager struct {
 	memAllocator memory.MemAllocator
 
 	pageTable map[uintptr]uintptr
-
-	mu sync.Mutex //
 }
 
 // 所有的操作方法都需要检查unsafe
@@ -56,9 +53,6 @@ func (mem MemoryManager) AcquireStorageMemory(numBytes uintptr) (bool, utils.Mem
 		return false, nil, utils.AcquireMemoryBytesZeroError
 	}
 
-	mem.mu.Lock()
-	defer mem.mu.Unlock()
-
 	return mem.staticPool.AcquireStorageMemory(uintptr(numBytes))
 }
 
@@ -66,9 +60,6 @@ func (mem MemoryManager) ReleaseStorageMemory(numBytes uintptr) error {
 	if numBytes < 0 {
 		return utils.AcquireMemoryBytesZeroError
 	}
-
-	mem.mu.Lock()
-	defer mem.mu.Unlock()
 
 	mem.staticPool.ReleaseStorageMemory(numBytes)
 	return nil
@@ -78,36 +69,46 @@ func (mem MemoryManager) ReleaseAllStorageMemory() {
 	mem.staticPool.ReleaseAllStorageMemory()
 }
 
-func (mem MemoryManager) AcquireComputeMemory(numBytes uint64) (uintptr, error) {
+func (mem *MemoryManager) AcquireShuffleMemory(numBytes uintptr) (uintptr, utils.MemPoolWarn, error) {
 	if numBytes < 0 {
-		return emptyValue, utils.AcquireMemoryBytesZeroError
+		return emptyValue, nil, utils.AcquireMemoryBytesZeroError
 	}
 
-	mem.mu.Lock()
 	// 从memory pool中获取可用的memory size
 	//mem.unsafe.
-
-	return 0, nil
+	return mem.staticPool.acquireShuffleMemory(numBytes)
 }
 
-func (mem MemoryManager) ReleaseComputeMemory(numBytes uint64) {
+func (mem *MemoryManager) ReleaseShuffleMemory(numBytes uintptr) error {
+	if numBytes < 0 {
+		return utils.AcquireMemoryBytesZeroError
+	}
 
+	mem.staticPool.ReleaseShuffleMemory(numBytes)
+	return nil
 }
 
-func (mem MemoryManager) AllocateComputePage(numBytes uint64) uintptr {
+func (mem *MemoryManager) AcquireIntersectionMemory(numBytes uintptr) (uintptr, utils.MemPoolWarn, error) {
+	if numBytes < 0 {
+		return emptyValue, nil, utils.AcquireMemoryBytesZeroError
+	}
+
+	return mem.staticPool.acquireIntersectionMemory(numBytes)
+}
+
+func (mem *MemoryManager) ReleaseIntersectionMemory(numBytes uintptr) error {
+	if numBytes < 0 {
+		return utils.AcquireMemoryBytesZeroError
+	}
+	mem.staticPool.ReleaseIntersectionMemory(numBytes)
+	return nil
+}
+
+func (mem *MemoryManager) AllocatePage(numBytes uintptr) (uintptr, error) {
 	// 当前不加page size limit
-
-	return 0
-
-}
-
-func (mem MemoryManager) AllocateStoragePage(numBytes uint64) (uintptr, error) {
 	if numBytes < 0 {
 		return emptyValue, utils.AcquireMemoryBytesZeroError
 	}
-
-	mem.mu.Lock()
-	defer mem.mu.Unlock()
 
 	addr, err := mem.memAllocator.Allocate(uintptr(numBytes))
 	if err != nil {
@@ -116,19 +117,36 @@ func (mem MemoryManager) AllocateStoragePage(numBytes uint64) (uintptr, error) {
 	return uintptr(addr), nil
 }
 
-func (mem *MemoryManager) FreeStoragePage(addr uintptr, numBytes uintptr) {
-	mem.mu.Lock()
-	defer mem.mu.Unlock()
-
-	mem.memAllocator.Free(unsafe.Pointer(addr), 0)
-	// 再由unsafe -> pool 释放
-	mem.staticPool.ReleaseStorageMemory(numBytes)
+func (mem *MemoryManager) FreePage(addr uintptr, numBytes uintptr) {
+	mem.memAllocator.Free(unsafe.Pointer(addr), numBytes)
 }
 
-//func (mem MemoryManager) FreePage(addr uintptr, numBytes uintptr) {}
+//func (mem *MemoryManager) AllocateStoragePage(numBytes uintptr) (uintptr, error) {
+//	if numBytes < 0 {
+//		return emptyValue, utils.AcquireMemoryBytesZeroError
+//	}
+//
+//	mem.mu.Lock()
+//	defer mem.mu.Unlock()
+//
+//	addr, err := mem.memAllocator.Allocate(numBytes)
+//	if err != nil {
+//		return 0, err
+//	}
+//	return uintptr(addr), nil
+//}
+//
+//func (mem *MemoryManager) FreeStoragePage(addr uintptr, numBytes uintptr) {
+//	mem.mu.Lock()
+//	defer mem.mu.Unlock()
+//
+//	mem.memAllocator.Free(unsafe.Pointer(addr), 0)
+//	// 再由unsafe -> pool 释放
+//	mem.staticPool.ReleaseStorageMemory(numBytes)
+//}
 
 // Destory 释放所有分配的内存
-func (mem *MemoryManager) Destory() {
+func (mem *MemoryManager) CleanAllAllocatedMemory() {
 	for size, addrValue := range mem.pageTable {
 		mem.memAllocator.Free(unsafe.Pointer(addrValue), size)
 	}
@@ -153,4 +171,4 @@ func dynamicMemAllocator(allocMode string) memory.MemAllocator {
 
 }
 
-var MemoryManagerInstance *MemoryManager = InitMemoryManager(&MemoryConfig{StorageMem: "5G", ShuffleMem: "5G", IntersectionMem: "5G"})
+//var MemoryManagerInstance *MemoryManager = InitMemoryManager(&MemoryConfig{StorageMem: "5G", ShuffleMem: "5G", IntersectionMem: "5G"})

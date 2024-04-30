@@ -2,7 +2,6 @@ package tcmallocgo
 
 import (
 	"github.com/byte-run/unsafe_mem_go/utils"
-	"sync"
 )
 
 var emptyValue = uintptr(0)
@@ -12,14 +11,12 @@ type staticMemoryManage struct {
 	storagePool      *storageMemoryPool
 	shufflePool      *shuffleMemoryPool
 	intersectionPool *intersectionMemoryPool
-
-	mu sync.RWMutex
 }
 
 // AcquireStorageMemory 请求storage部分的内存
 func (mem *staticMemoryManage) AcquireStorageMemory(numBytes uintptr) (bool, utils.MemPoolWarn, error) {
-	mem.mu.RLock()
-	defer mem.mu.RUnlock()
+	mem.storagePool.Lock()
+	defer mem.storagePool.Unlock()
 
 	if numBytes > mem.storagePool.PoolSize {
 		return false, nil, utils.StoragePoolOutOfMemoryError
@@ -34,29 +31,29 @@ func (mem *staticMemoryManage) AcquireStorageMemory(numBytes uintptr) (bool, uti
 }
 
 func (mem *staticMemoryManage) ReleaseStorageMemory(numBytes uintptr) {
-	mem.mu.Lock()
-	defer mem.mu.Unlock()
+	mem.storagePool.Lock()
+	defer mem.storagePool.Unlock()
 
 	mem.storagePool.ReleaseMemory(numBytes)
 }
 
 func (mem *staticMemoryManage) ReleaseAllStorageMemory() {
-	mem.mu.Lock()
-	defer mem.mu.Unlock()
+	mem.storagePool.Lock()
+	defer mem.storagePool.Unlock()
 
 	mem.storagePool.ReleaseAllMemory()
 }
 
 // acquireShuffleMemory
 func (mem *staticMemoryManage) acquireShuffleMemory(numBytes uintptr) (uintptr, utils.MemPoolWarn, error) {
-	mem.mu.RLock()
-	defer mem.mu.RUnlock()
+	mem.shufflePool.Lock()
+	defer mem.shufflePool.Unlock()
 
 	if numBytes > mem.shufflePool.PoolSize {
 		return emptyValue, nil, utils.ShufflePoolOutOfMemoryError
 	}
 
-	memory, err := mem.shufflePool.AcquireMemory(numBytes)
+	memory, err := mem.shufflePool.acquireMemory(numBytes)
 	if err != nil {
 		return emptyValue, nil, err
 	}
@@ -66,16 +63,16 @@ func (mem *staticMemoryManage) acquireShuffleMemory(numBytes uintptr) (uintptr, 
 }
 
 func (mem *staticMemoryManage) ReleaseShuffleMemory(numBytes uintptr) {
-	mem.mu.Lock()
-	defer mem.mu.Unlock()
+	mem.shufflePool.Lock()
+	defer mem.shufflePool.Unlock()
 
 	mem.shufflePool.ReleaseMemory(numBytes)
 }
 
 // acquireIntersectionMemory Intersection过程中需要什么的内存
 func (mem *staticMemoryManage) acquireIntersectionMemory(numBytes uintptr) (uintptr, utils.MemPoolWarn, error) {
-	mem.mu.Lock()
-	defer mem.mu.Unlock()
+	mem.intersectionPool.Lock()
+	defer mem.intersectionPool.Unlock()
 
 	// param check
 	if numBytes > mem.intersectionPool.PoolSize {
@@ -94,8 +91,8 @@ func (mem *staticMemoryManage) acquireIntersectionMemory(numBytes uintptr) (uint
 }
 
 func (mem *staticMemoryManage) ReleaseIntersectionMemory(numBytes uintptr) {
-	mem.mu.Lock()
-	defer mem.mu.Unlock()
+	mem.intersectionPool.Lock()
+	defer mem.intersectionPool.Unlock()
 
 	mem.intersectionPool.ReleaseMemory(numBytes)
 }
@@ -112,15 +109,15 @@ func newStaticMemoryManage(config *MemoryConfig) *staticMemoryManage {
 
 	// init memPool
 	unsafeMem.storagePool = &storageMemoryPool{
-		MemoryPool{PoolSize: config.GetStorageMemBytes()},
+		&MemoryPool{PoolSize: config.GetStorageMemBytes()},
 	}
 	unsafeMem.shufflePool = &shuffleMemoryPool{
-		MemoryPool: MemoryPool{
+		MemoryPool: &MemoryPool{
 			PoolSize: config.GetShuffleMemBytes(),
 		},
 	}
 	unsafeMem.intersectionPool = &intersectionMemoryPool{
-		MemoryPool: MemoryPool{PoolSize: config.GetIntersectionMemBytes()},
+		MemoryPool: &MemoryPool{PoolSize: config.GetIntersectionMemBytes()},
 	}
 
 	return unsafeMem
