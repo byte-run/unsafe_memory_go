@@ -1,7 +1,9 @@
 package tcmallocgo
 
 import (
+	"github.com/byte-run/unsafe_mem_go/memory"
 	"github.com/byte-run/unsafe_mem_go/utils"
+	"log"
 )
 
 var emptyValue = uintptr(0)
@@ -11,6 +13,8 @@ type staticMemoryManage struct {
 	storagePool      *storageMemoryPool
 	shufflePool      *shuffleMemoryPool
 	intersectionPool *intersectionMemoryPool
+
+	MemoryMode MemoryMode
 }
 
 // AcquireStorageMemory 请求storage部分的内存
@@ -103,22 +107,40 @@ func (mem *staticMemoryManage) ResetPoolUsed() {
 	mem.intersectionPool.used = 0
 }
 
+func (mem *staticMemoryManage) setMemoryMode() {
+	mem.MemoryMode = MemoryMode_OffHeap
+}
+
+// allocator 根据设定采用不同的内存分配实现
+func (mem *staticMemoryManage) DynamicMemAllocator() memory.MemAllocator {
+	switch mem.MemoryMode {
+	case MemoryMode_OnHeap:
+		return memory.UnsafeGo
+	case MemoryMode_OffHeap:
+		return memory.UnsafeC
+	default:
+		log.Fatalf("Not Supported MemoryMode: %v", mem.MemoryMode)
+		return nil
+	}
+}
+
 // newStaticMemoryManage init
 func newStaticMemoryManage(config *MemoryConfig) *staticMemoryManage {
-	unsafeMem := new(staticMemoryManage)
+	memManager := new(staticMemoryManage)
 
+	memManager.setMemoryMode()
 	// init memPool
-	unsafeMem.storagePool = &storageMemoryPool{
+	memManager.storagePool = &storageMemoryPool{
 		&MemoryPool{PoolSize: config.GetStorageMemBytes()},
 	}
-	unsafeMem.shufflePool = &shuffleMemoryPool{
+	memManager.shufflePool = &shuffleMemoryPool{
 		MemoryPool: &MemoryPool{
 			PoolSize: config.GetShuffleMemBytes(),
 		},
 	}
-	unsafeMem.intersectionPool = &intersectionMemoryPool{
+	memManager.intersectionPool = &intersectionMemoryPool{
 		MemoryPool: &MemoryPool{PoolSize: config.GetIntersectionMemBytes()},
 	}
 
-	return unsafeMem
+	return memManager
 }
