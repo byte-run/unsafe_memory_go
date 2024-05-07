@@ -1,8 +1,11 @@
 package tcmallocgo
 
 import (
+	"fmt"
+	"github.com/byte-run/unsafe_mem_go/bitset"
 	"github.com/byte-run/unsafe_mem_go/memory"
 	"github.com/byte-run/unsafe_mem_go/utils"
+	"sync"
 	"unsafe"
 )
 
@@ -10,7 +13,11 @@ type TaskMemoryManager struct {
 	staticPool   *staticMemoryManage
 	memAllocator memory.MemAllocator
 
-	pageTable map[uintptr]uintptr
+	pageTable      []*memory.MemBlock
+	allocatedPages bitset.BitSet
+
+	// lock
+	lock sync.RWMutex
 }
 
 // 所有的操作方法都需要检查unsafe
@@ -94,6 +101,24 @@ func (tmm *TaskMemoryManager) FreePage(addr uintptr, numBytes uintptr) {
 	tmm.memAllocator.Free(unsafe.Pointer(addr), numBytes)
 }
 
+// -------------- insert content
+func (tmm *TaskMemoryManager) FreeBlockPage(page *memory.MemBlock) {
+	// TODO assert
+
+	tmm.pageTable[page.PageNumber] = nil
+	tmm.lock.Lock()
+	tmm.allocatedPages.Clear(page.PageNumber)
+	tmm.lock.Unlock()
+	// TODO waiting to Logger
+	fmt.Printf("Free page number %d (%d bytes)", page.PageNumber, page.Size)
+
+	pageSize := page.Size()
+	page.PageNumber = memory.FreedInTMMPageNumber
+	tmm.memAllocator.FreeBlock(page)
+	tmm.ReleaseShuffleMemory(pageSize)
+
+}
+
 //func (tmm *TaskMemoryManager) AllocateStoragePage(numBytes uintptr) (uintptr, error) {
 //	if numBytes < 0 {
 //		return emptyValue, utils.AcquireMemoryBytesZeroError
@@ -120,10 +145,10 @@ func (tmm *TaskMemoryManager) FreePage(addr uintptr, numBytes uintptr) {
 
 // Destory 释放所有分配的内存
 func (tmm *TaskMemoryManager) CleanAllAllocatedMemory() {
-	for size, addrValue := range tmm.pageTable {
-		tmm.memAllocator.Free(unsafe.Pointer(addrValue), size)
-	}
-	tmm.staticPool.ResetPoolUsed()
+	//for size, addrValue := range tmm.pageTable {
+	//	tmm.memAllocator.Free(unsafe.Pointer(addrValue), size)
+	//}
+	//tmm.staticPool.ResetPoolUsed()
 }
 
 func InitTaskMemoryManager(config *MemoryConfig) *TaskMemoryManager {

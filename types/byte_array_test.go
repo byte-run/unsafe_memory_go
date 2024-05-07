@@ -7,16 +7,32 @@ import (
 	"unsafe"
 )
 
-func TestByteSize(t *testing.T) {
-	emptyByteArray := ByteArray{}
-	emptySize := unsafe.Sizeof(emptyByteArray)
-	t.Logf("empty byteArray size: %d", emptySize)
+//func TestByteSize(t *testing.T) {
+//	emptyByteArray := ByteArray{}
+//	emptySize := unsafe.Sizeof(emptyByteArray)
+//	t.Logf("empty byteArray size: %d", emptySize)
+//
+//	byteArray := ByteArray{10, 5, nil}
+//	valueSize := unsafe.Sizeof(byteArray)
+//	t.Logf("value byteArray size: %d", valueSize)
+//
+//	//
+//}
 
-	byteArray := ByteArray{10, 5, nil}
-	valueSize := unsafe.Sizeof(byteArray)
-	t.Logf("value byteArray size: %d", valueSize)
+type StructToBytes struct {
+	data int64
+	str  string
+}
 
-	//
+type SliceMock struct {
+	addr uintptr
+	len  int
+	cap  int
+}
+
+type StructToByte struct {
+	data int64
+	str  any
 }
 
 func TestGoType(t *testing.T) {
