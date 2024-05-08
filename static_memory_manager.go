@@ -18,17 +18,16 @@ type staticMemoryManage struct {
 }
 
 // AcquireStorageMemory 请求storage部分的内存
-func (mem *staticMemoryManage) AcquireStorageMemory(numBytes uintptr) (bool, utils.MemPoolWarn, error) {
-	mem.storagePool.Lock()
-	defer mem.storagePool.Unlock()
-
+func (mem *staticMemoryManage) AcquireStorageMemory(numBytes uintptr) (uintptr, utils.MemPoolWarn, error) {
 	if numBytes > mem.storagePool.PoolSize {
-		return false, nil, utils.StoragePoolOutOfMemoryError
+		return 0, nil, utils.StoragePoolOutOfMemoryError
 	}
 
+	mem.storagePool.Lock()
+	defer mem.storagePool.Unlock()
 	memory, err := mem.storagePool.AcquireMemory(numBytes)
 	if err != nil {
-		return false, nil, err
+		return 0, nil, err
 	}
 	poolStatus := mem.storagePool.CheckPoolCapacity()
 	return memory, poolStatus, nil

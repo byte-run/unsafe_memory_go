@@ -69,9 +69,9 @@ func (pool *storageMemoryPool) PoolName() string {
 }
 
 // AcquireMemory 申请内存，有点类似提交内存大小的申请，看pool limit够不够
-func (pool *storageMemoryPool) AcquireMemory(numBytes uintptr) (bool, error) {
+func (pool *storageMemoryPool) AcquireMemory(numBytes uintptr) (uintptr, error) {
 	if numBytes == 0 {
-		return false, utils.AcquireMemoryBytesZeroError
+		return 0, utils.AcquireMemoryBytesZeroError
 	}
 	pool.condMu.L.Lock()
 	defer pool.condMu.L.Unlock()
@@ -79,12 +79,12 @@ func (pool *storageMemoryPool) AcquireMemory(numBytes uintptr) (bool, error) {
 	// pool retain mem
 	grant := utils.Min(numBytes, pool.MemoryFree())
 	// 如果pool有空间的话, 更新pool的use
-	if grant == numBytes {
-		pool.MemoryPool.used += numBytes
-		return true, nil
-	}
+	//if grant == numBytes {
+	//	pool.MemoryPool.used += numBytes
+	//	return true, nil
+	//}
 
-	return false, utils.StoragePoolOutOfMemoryError
+	return grant, utils.StoragePoolOutOfMemoryError
 }
 
 // ReleaseMemory 释放内存

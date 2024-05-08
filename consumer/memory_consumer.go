@@ -3,9 +3,22 @@ package consumer
 import (
 	"github.com/byte-run/unsafe_mem_go"
 	"github.com/byte-run/unsafe_mem_go/memory"
+	"github.com/byte-run/unsafe_mem_go/utils"
 )
 
 // 对rock业务来说
+
+type MemoryConsumer interface {
+	AllocateArray(size uintptr) uintptr
+	FreeArray(memBlock *memory.MemBlock)
+	AllocatePage(numBytes uintptr) (*memory.MemBlock, error)
+	FreePage(page *memory.MemBlock)
+	//acquireMemory(size uintptr) uintptr
+	//releaseMemory(size uintptr)
+	FreeMemory()
+
+	GetStage() tcmallocgo.CalcStage
+}
 
 type memoryConsumer struct {
 	taskMemoryManager *tcmallocgo.TaskMemoryManager
@@ -22,6 +35,20 @@ func (consumer *memoryConsumer) AllocateArray(size uintptr) uintptr {
 func (consumer *memoryConsumer) FreeArray(memBlock *memory.MemBlock) {
 	// TODO waiting to finish
 	consumer.FreePage(memBlock)
+}
+
+func (consumer *memoryConsumer) AllocatePage(numBytes uintptr, obj MemoryConsumer) (*memory.MemBlock, error) {
+
+	page, err := consumer.taskMemoryManager.AllocatePage(numBytes, obj)
+	if err != nil {
+		return nil, err
+	}
+	if page == nil || page.Size() < numBytes {
+		// TODO log records the kind of pool and out to log file
+		return nil, utils.PoolOutOfMemoryError
+	}
+	consumer.used += page.Size()
+	return page, nil
 }
 
 func (consumer *memoryConsumer) FreePage(page *memory.MemBlock) {
@@ -45,10 +72,10 @@ func (consumer *memoryConsumer) FreeMemory() {
 
 //func (consumer *MemoryConsumer) ThrowOomError() uintptr {}
 
-func NewMemoryConsumer(manager tcmallocgo.TaskMemoryManager) *memoryConsumer {
-	var memoryConsumer = new(memoryConsumer)
-	memoryConsumer.taskMemoryManager = &manager
-	memoryConsumer.used = 0
-
-	return memoryConsumer
-}
+//func NewMemoryConsumer(manager tcmallocgo.TaskMemoryManager) MemoryConsumer {
+//	var memoryConsumer = new(memoryConsumer)
+//	memoryConsumer.taskMemoryManager = &manager
+//	memoryConsumer.used = 0
+//
+//	return memoryConsumer
+//}

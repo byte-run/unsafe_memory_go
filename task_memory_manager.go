@@ -3,6 +3,7 @@ package tcmallocgo
 import (
 	"fmt"
 	"github.com/byte-run/unsafe_mem_go/bitset"
+	"github.com/byte-run/unsafe_mem_go/consumer"
 	"github.com/byte-run/unsafe_mem_go/memory"
 	"github.com/byte-run/unsafe_mem_go/utils"
 	"sync"
@@ -25,7 +26,7 @@ func (tmm *TaskMemoryManager) checkUnsafeIsNil() bool {
 	return tmm.staticPool == nil
 }
 
-func (tmm TaskMemoryManager) AcquireStorageMemory(numBytes uintptr) (bool, utils.MemPoolWarn, error) {
+func (tmm TaskMemoryManager) AcquireStorageMemory(numBytes uintptr) (uintptr, utils.MemPoolWarn, error) {
 	if numBytes < 0 {
 		return false, nil, utils.AcquireMemoryBytesZeroError
 	}
@@ -46,9 +47,6 @@ func (tmm TaskMemoryManager) ReleaseAllStorageMemory() {
 	tmm.staticPool.ReleaseAllStorageMemory()
 }
 
-// --------------------- update -------------------------------
-
-// --------------------- update finish ------------------------
 func (tmm *TaskMemoryManager) AcquireShuffleMemory(numBytes uintptr) (uintptr, utils.MemPoolWarn, error) {
 	if numBytes < 0 {
 		return emptyValue, nil, utils.AcquireMemoryBytesZeroError
@@ -84,17 +82,57 @@ func (tmm *TaskMemoryManager) ReleaseIntersectionMemory(numBytes uintptr) error 
 	return nil
 }
 
-func (tmm *TaskMemoryManager) AllocatePage(numBytes uintptr) (uintptr, error) {
-	// 当前不加page size limit
-	if numBytes < 0 {
-		return emptyValue, utils.AcquireMemoryBytesZeroError
+func (tmm *TaskMemoryManager) AcquireMemory(numBytes uintptr, consumer consumer.MemoryConsumer) (uintptr, utils.MemPoolWarn, error) {
+	if numBytes <= 0 {
+		return emptyValue, nil, utils.AcquireMemoryBytesZeroError
+	}
+	if consumer == nil {
+		return emptyValue, nil, utils.AcquireMemoryBytesZeroError
 	}
 
-	addr, err := tmm.memAllocator.Allocate(uintptr(numBytes))
-	if err != nil {
-		return 0, err
+	//var got uintptr
+	//var poolWarn utils.MemPoolWarn
+	//var err error
+
+	switch consumer.GetStage() {
+	case ShuffleCalc:
+		return tmm.staticPool.acquireShuffleMemory(numBytes)
+	case IntersectionCalc:
+		return tmm.staticPool.acquireIntersectionMemory(numBytes)
+	case StorageCalc:
+		return tmm.staticPool.AcquireStorageMemory(numBytes)
+	default:
+		return 0, nil, utils.AcquireMemoryBytesZeroError
 	}
-	return uintptr(addr), nil
+
+}
+
+func (tmm *TaskMemoryManager) AllocatePage(numBytes uintptr, consumer consumer.MemoryConsumer) (*memory.MemBlock, error) {
+	// 当前不加page size limit
+	if numBytes < 0 {
+		return nil, utils.AcquireMemoryBytesZeroError
+	}
+
+	// acquire pool mem
+	got, _, err := tmm.AcquireMemory(numBytes, consumer)
+	if err != nil {
+		return nil, err
+	}
+	if got <= 0 {
+		return nil, utils.AcquireMemoryBytesZeroError
+	}
+
+	// get page number
+
+	var page *memory.MemBlock
+	page, err = tmm.memAllocator.AllocateBlock(numBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	//page.PageNumber =
+
+	return page, nil
 }
 
 func (tmm *TaskMemoryManager) FreePage(addr uintptr, numBytes uintptr) {
@@ -107,7 +145,7 @@ func (tmm *TaskMemoryManager) FreeBlockPage(page *memory.MemBlock) {
 
 	tmm.pageTable[page.PageNumber] = nil
 	tmm.lock.Lock()
-	tmm.allocatedPages.Clear(page.PageNumber)
+	tmm.allocatedPages.Clear(uint(page.PageNumber))
 	tmm.lock.Unlock()
 	// TODO waiting to Logger
 	fmt.Printf("Free page number %d (%d bytes)", page.PageNumber, page.Size)
